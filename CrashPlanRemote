@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# CrashPlanRemote
+# Andy Sayler
+# September 2015
+# Works with CrashPlan 4.3+ and Linux
+# Implements http://support.code42.com/CrashPlan/Latest/Configuring/Using_CrashPlan_On_A_Headless_Computer
+
+# Usage
+display_usage() { 
+    echo -e "\nUsage:\n$0 <SSH Host> \n" 
+} 
+
+# Check Args
+if [[ $# -lt 1 ]]
+then
+    display_usage
+    exit 1
+fi
+if [[ ( $1 == "--help") ||  $1 == "-h" ]] 
+then 
+    display_usage
+    exit 0
+fi 
+
+# Get Args
+REMOTEHOST=$1
+
+#TODO: Make these configurable
+CRASHPLAN_INSTALL="${HOME}/crashplanpro/crashplan/"
+CRASHPLAN_DESKTOP="${CRASHPLAN_INSTALL}/bin/CrashPlanDesktop"
+
+if [[ ! -d "${CRASHPLAN_INSTALL}" ]]
+then
+    echo "Could not find CrashPlanPro install at ${CRASHPLAN_INSTALL}"
+    echo "Have you installed CrashPlanPro to that location?"
+    exit 1
+fi
+
+INFO_DIR_LOCAL="${HOME}/.crashplan"
+INFO_DIR_REMOTE="/var/lib/crashplan"
+INFO_FILE=".ui_info"
+INFO_FILE_OLD="${INFO_FILE}.robin.old"
+
+INFO_PATH_LOCAL="${INFO_DIR_LOCAL}/${INFO_FILE}"
+INFO_PATH_REMOTE="${INFO_DIR_REMOTE}/${INFO_FILE}"
+INFO_PATH_OLD="${INFO_DIR_LOCAL}/${INFO_FILE_OLD}"
+
+PORT_ORIG="4243"
+PORT_NEW="4200"
+
+# Setup
+if [[ ! -d "${INFO_DIR_LOCAL}" ]]
+then
+    mkdir "${INFO_DIR_LOCAL}"
+fi
+
+# Get and modify INFO_FILE
+if [[ ! -d "${INFO_DIR_LOCAL}" ]]
+then
+    mkdir "${INFO_DIR_LOCAL}"
+fi
+if [[ -e  "${INFO_PATH_LOCAL}" ]]
+then
+    mv "${INFO_PATH_LOCAL}" "${INFO_PATH_OLD}"
+fi
+
+scp ${REMOTEHOST}:"${INFO_PATH_REMOTE}" "${INFO_PATH_LOCAL}"
+if [[ $? -ne 0 ]]
+then
+    echo "Failed to copy ${INFO_PATH_REMOTE} from host ${REMOTEHOST}"
+    exit 1
+fi
+
+cleanup_info(){
+    if [[ -e "${INFO_PATH_OLD}" ]]
+    then
+        mv "${INFO_PATH_OLD}" "${INFO_PATH_LOCAL}"
+    else
+        rm "${INFO_PATH_LOCAL}"
+    fi
+}
+
+sed -i "s/${PORT_ORIG}/${PORT_NEW}/" "${INFO_PATH_LOCAL}"
+if [[ $? -ne 0 ]]
+then
+    echo "Failed to update port in ${INFO_PATH_LOCAL}"
+    cleanup_info
+    exit 1
+fi
+
+# Set Port Forwarding via SSH
+# TODO: Autodetect PORT_ORIG via INFO_FILE
+CMDSSH="ssh -N -f -L ${PORT_NEW}:localhost:${PORT_ORIG} ${REMOTEHOST}"
+${CMDSSH}
+if [[ $? -ne 0 ]]
+then
+    echo "Failed to establish SSH port forwarding to host ${REMOTEHOST}"
+    cleanup_info
+    exit 1
+fi
+
+cleanup_ssh(){
+    pkill -f "${CMDSSH}"
+}
+
+# Run CrashPlan Desktop
+${CRASHPLAN_DESKTOP}
+if [[ $? -ne 0 ]]
+then
+    echo "CrashPlanDeskrop Exited with Error"
+    cleanup_ssh
+    cleanup_info
+    exit 1
+fi
+
+# Cleanup
+echo "Press any key when complete to perform cleanup"
+read
+cleanup_ssh
+cleanup_info
+exit 0
