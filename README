@@ -6,4 +6,4 @@ A CrashPlanDesktop wrapper for headless/remote CrashPlan access.
 
 Implements http://support.code42.com/CrashPlan/Latest/Configuring/Using_CrashPlan_On_A_Headless_Computer
 
-Requires a local CrashPlan install at ${HOME}/crashplanpro/crashplan.
+Requires a local CrashPlan 4.3+ install at ${HOME}/crashplanpro/crashplan.
