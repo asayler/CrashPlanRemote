@@ -29,7 +29,7 @@ CPTYPE=$1
 REMOTEHOST=$2
 
 #TODO: Make these configurable
-CRASHPLAN_INSTALL="/tmp/crashplan/"
+CRASHPLAN_INSTALL="$HOME/crashplanremote"
 CRASHPLAN_DESKTOP="${CRASHPLAN_INSTALL}/bin/CrashPlanDesktop"
 
 # if [[ ! -d "${CRASHPLAN_INSTALL}" ]]
@@ -72,6 +72,7 @@ touch "${CRASHPLAN_INSTALL}/log/ui_output.log"
 mkdir "${CRASHPLAN_INSTALL}/conf"
 touch "${CRASHPLAN_INSTALL}/install.vars"
 
+echo "" >> "${CRASHPLAN_INSTALL}/install.vars"
 echo "TARGETDIR=${CRASHPLAN_INSTALL}" >> "${CRASHPLAN_INSTALL}/install.vars"
 echo "BINSDIR=" >> "${CRASHPLAN_INSTALL}/install.vars"
 echo "MANIFESTDIR=${CRASHPLAN_INSTALL}/manifest" >> "${CRASHPLAN_INSTALL}/install.vars"
