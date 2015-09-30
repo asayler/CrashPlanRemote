@@ -8,11 +8,11 @@
 
 # Usage
 display_usage() { 
-    echo -e "\nUsage:\n$0 <SSH Host> \n" 
+    echo -e "\nUsage:\n$0 <pro|home> <SSH Host> \n" 
 } 
 
 # Check Args
-if [[ $# -lt 1 ]]
+if [[ $# -ne 2 ]]
 then
     display_usage
     exit 1
@@ -24,10 +24,21 @@ then
 fi 
 
 # Get Args
-REMOTEHOST=$1
+CPTYPE=$1
+REMOTEHOST=$2
 
 #TODO: Make these configurable
-CRASHPLAN_INSTALL="${HOME}/crashplanpro/crashplan/"
+if [[ ${CPTYPE} == "pro" ]]
+then
+    CRASHPLAN_INSTALL="${HOME}/crashplanpro/crashplan/"
+elif [[ ${CPTYPE} == "home" ]]
+then
+    CRASHPLAN_INSTALL="${HOME}/crashplan/crashplan/"
+else
+    display_usage
+    exit 1
+fi
+
 CRASHPLAN_DESKTOP="${CRASHPLAN_INSTALL}/bin/CrashPlanDesktop"
 
 if [[ ! -d "${CRASHPLAN_INSTALL}" ]]
