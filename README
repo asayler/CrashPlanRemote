@@ -4,6 +4,23 @@ September 2015
 
 A CrashPlanDesktop wrapper for headless/remote CrashPlan access.
 
+Tested with CrashPlan 4.3, 4.4
+
 Implements http://support.code42.com/CrashPlan/Latest/Configuring/Using_CrashPlan_On_A_Headless_Computer
 
-Requires a local CrashPlan 4.3+ install at ${HOME}/crashplanpro/crashplan.
+Process:
+1. Downloads CrashPlan install from remote machine
+2. Downloads Auth info from remote machine
+3. Sets up SSH port forwarding
+4. Launches local CrashPlanDesktop process
+5. Cleans up
+
+Stores installs at ~/.crashplanremote/
+
+Usage:
+
+    ./CrashPlanRemote <SSH Connection String>
+
+Example:
+
+    ./CrashPlanRemote user@server.test.com
