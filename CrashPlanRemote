@@ -1,5 +1,4 @@
 #!/bin/bash
-set -x
 
 # CrashPlanRemote
 # Andy Sayler
@@ -7,13 +6,24 @@ set -x
 # Works with CrashPlan 4.3+ and Linux
 # Implements http://support.code42.com/CrashPlan/Latest/Configuring/Using_CrashPlan_On_A_Headless_Computer
 
-# Usage
+### Utility Functions ###
+errcho(){ >&2 echo "$@"; }
+
 display_usage() { 
-    echo -e "\nUsage:\n$0 <pro|home> <SSH Host> \n" 
+    errcho -e "\nUsage:\n$0 <SSH Connection String> \n" 
 } 
 
-# Check Args
-if [[ $# -ne 2 ]]
+rsync_check() { 
+    rsync -Paz --delete "${1}" "${2}"
+    if [[ $? -ne 0 ]]
+    then
+        errcho "Failed to copy ${1} to ${2}"
+        exit 1
+    fi
+} 
+
+### Check Args ###
+if [[ $# -ne 1 ]]
 then
     display_usage
     exit 1
@@ -24,22 +34,14 @@ then
     exit 0
 fi 
 
-# Get Args
-CPTYPE=$1
-REMOTEHOST=$2
+### Get Args ###
+SSHCONNSTR=$1
+REMOTEHOSTNAME=$(ssh $SSHCONNSTR hostname -f)
 
-#TODO: Make these configurable
-CRASHPLAN_INSTALL="$HOME/crashplanremote"
-CRASHPLAN_DESKTOP="${CRASHPLAN_INSTALL}/bin/CrashPlanDesktop"
-
-# if [[ ! -d "${CRASHPLAN_INSTALL}" ]]
-# then
-#     echo "Could not find CrashPlanPro install at ${CRASHPLAN_INSTALL}"
-#     echo "Have you installed CrashPlanPro to that location?"
-#     exit 1
-# fi
-
+CRASHPLAN_DIR_LOCAL="$HOME/.crashplanremote/$REMOTEHOSTNAME"
 CRASHPLAN_DIR_REMOTE="/usr/local/crashplan"
+CRASHPLAN_DESKTOP="${CRASHPLAN_DIR_LOCAL}/bin/CrashPlanDesktop"
+
 INFO_DIR_LOCAL="${HOME}/.crashplan"
 INFO_DIR_REMOTE="/var/lib/crashplan"
 INFO_FILE=".ui_info"
@@ -52,62 +54,84 @@ INFO_PATH_OLD="${INFO_DIR_LOCAL}/${INFO_FILE_OLD}"
 PORT_ORIG="4243"
 PORT_NEW="4200"
 
-# Get Remote Install
-if [[ -d "${CRASHPLAN_INSTALL}" ]]
+### Check Remote Files ###
+if ! (ssh $SSHCONNSTR '[ -d $CRASHPLAN_DIR_REMOTE ]')
 then
-    rm -rf "${CRASHPLAN_INSTALL}"
+    errcho "Could not locate remote crashplan install at $SSHCONNSTR:$CRASHPLAN_DIR_REMOTE"
+    exit 1
 fi
-mkdir "${CRASHPLAN_INSTALL}"
 
-rsync -avz ${REMOTEHOST}:"${CRASHPLAN_DIR_REMOTE}/bin" "${CRASHPLAN_INSTALL}/"
-rsync -avz ${REMOTEHOST}:"${CRASHPLAN_DIR_REMOTE}/jre" "${CRASHPLAN_INSTALL}/"
-rsync -avz ${REMOTEHOST}:"${CRASHPLAN_DIR_REMOTE}/lang" "${CRASHPLAN_INSTALL}/"
-rsync -avz ${REMOTEHOST}:"${CRASHPLAN_DIR_REMOTE}/lib" "${CRASHPLAN_INSTALL}/"
-rsync -avz ${REMOTEHOST}:"${CRASHPLAN_DIR_REMOTE}/skin" "${CRASHPLAN_INSTALL}/"
-rsync -avz ${REMOTEHOST}:"${CRASHPLAN_DIR_REMOTE}/*.so" "${CRASHPLAN_INSTALL}/"
+if ! (ssh $SSHCONNSTR '[ -e $INFO_PATH_REMOTE ]')
+then
+    errcho "Could not locate remote crashplan $INFO_FILE at $SSHCONNSTR:$INFO_PATH_REMOTE"
+    exit 1
+fi
 
-mkdir "${CRASHPLAN_INSTALL}/log"
-touch "${CRASHPLAN_INSTALL}/log/ui_error.log"
-touch "${CRASHPLAN_INSTALL}/log/ui_output.log"
-mkdir "${CRASHPLAN_INSTALL}/conf"
-touch "${CRASHPLAN_INSTALL}/install.vars"
+### Get Remote Install ###
+echo "Syncing Remote Install Files to Local Host"
 
-echo "" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "TARGETDIR=${CRASHPLAN_INSTALL}" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "BINSDIR=" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "MANIFESTDIR=${CRASHPLAN_INSTALL}/manifest" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "INITIR=" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "RUNLVLDIR=" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "INSTALLDATE=" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "APP_BASENAME=CrashPlan" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "DIR_BASENAME=crashplan" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "DOWNLOAD_HOST=download.crashplan.com" >> "${CRASHPLAN_INSTALL}/install.vars"
-echo "JAVACOMMON=${CRASHPLAN_INSTALL}/jre/bin/java" >> "${CRASHPLAN_INSTALL}/install.vars"
+if [[ ! -d "${CRASHPLAN_DIR_LOCAL}" ]]
+then
+    mkdir "${CRASHPLAN_DIR_LOCAL}"
+fi
 
-# Setup
+rsync_check ${SSHCONNSTR}:"${CRASHPLAN_DIR_REMOTE}/bin" "${CRASHPLAN_DIR_LOCAL}/"
+rsync_check ${SSHCONNSTR}:"${CRASHPLAN_DIR_REMOTE}/jre" "${CRASHPLAN_DIR_LOCAL}/" 
+rsync_check ${SSHCONNSTR}:"${CRASHPLAN_DIR_REMOTE}/lang" "${CRASHPLAN_DIR_LOCAL}/" 
+rsync_check ${SSHCONNSTR}:"${CRASHPLAN_DIR_REMOTE}/lib" "${CRASHPLAN_DIR_LOCAL}/" 
+rsync_check ${SSHCONNSTR}:"${CRASHPLAN_DIR_REMOTE}/skin" "${CRASHPLAN_DIR_LOCAL}/" 
+rsync_check ${SSHCONNSTR}:"${CRASHPLAN_DIR_REMOTE}/*.so" "${CRASHPLAN_DIR_LOCAL}/" 
+
+if [[ ! -d "${CRASHPLAN_DIR_LOCAL}/conf" ]]
+then
+    mkdir "${CRASHPLAN_DIR_LOCAL}/conf"
+fi
+
+if [[ ! -d "${CRASHPLAN_DIR_LOCAL}/log" ]]
+then
+    mkdir "${CRASHPLAN_DIR_LOCAL}/log"
+fi
+rm -rf "${CRASHPLAN_DIR_LOCAL}/log/ui_error.log"
+touch "${CRASHPLAN_DIR_LOCAL}/log/ui_error.log"
+rm -rf "${CRASHPLAN_DIR_LOCAL}/log/ui_output.log"
+touch "${CRASHPLAN_DIR_LOCAL}/log/ui_output.log"
+
+INSTALL_VARS="${CRASHPLAN_DIR_LOCAL}/install.vars"
+rm -rf "${INSTALL_VARS}"
+echo "" >> "${INSTALL_VARS}"
+echo "TARGETDIR=${CRASHPLAN_DIR_LOCAL}" >> "${INSTALL_VARS}"
+echo "BINSDIR=" >> "${INSTALL_VARS}"
+echo "MANIFESTDIR=${CRASHPLAN_DIR_LOCAL}/manifest" >> "${INSTALL_VARS}"
+echo "INITIR=" >> "${INSTALL_VARS}"
+echo "RUNLVLDIR=" >> "${INSTALL_VARS}"
+echo "INSTALLDATE=" >> "${INSTALL_VARS}"
+echo "APP_BASENAME=CrashPlan" >> "${INSTALL_VARS}"
+echo "DIR_BASENAME=crashplan" >> "${INSTALL_VARS}"
+echo "DOWNLOAD_HOST=download.crashplan.com" >> "${INSTALL_VARS}"
+echo "JAVACOMMON=${CRASHPLAN_DIR_LOCAL}/jre/bin/java" >> "${INSTALL_VARS}"
+
+### Get Remote INFO_FILE ###
+echo "Syncing Remote Auth File to Local Host"
+
 if [[ ! -d "${INFO_DIR_LOCAL}" ]]
 then
     mkdir "${INFO_DIR_LOCAL}"
 fi
 
-# Get and modify INFO_FILE
-if [[ ! -d "${INFO_DIR_LOCAL}" ]]
-then
-    mkdir "${INFO_DIR_LOCAL}"
-fi
 if [[ -e  "${INFO_PATH_LOCAL}" ]]
 then
     mv "${INFO_PATH_LOCAL}" "${INFO_PATH_OLD}"
 fi
 
-scp ${REMOTEHOST}:"${INFO_PATH_REMOTE}" "${INFO_PATH_LOCAL}"
+scp ${SSHCONNSTR}:"${INFO_PATH_REMOTE}" "${INFO_PATH_LOCAL}"
 if [[ $? -ne 0 ]]
 then
-    echo "Failed to copy ${INFO_PATH_REMOTE} from host ${REMOTEHOST}"
+    errcho "Failed to copy ${INFO_PATH_REMOTE} from host ${SSHCONNSTR}"
     exit 1
 fi
 
 cleanup_info(){
+    echo "Cleaning Up Auth File"
     if [[ -e "${INFO_PATH_OLD}" ]]
     then
         mv "${INFO_PATH_OLD}" "${INFO_PATH_LOCAL}"
@@ -119,37 +143,40 @@ cleanup_info(){
 sed -i "s/${PORT_ORIG}/${PORT_NEW}/" "${INFO_PATH_LOCAL}"
 if [[ $? -ne 0 ]]
 then
-    echo "Failed to update port in ${INFO_PATH_LOCAL}"
+    errcho "Failed to update port in ${INFO_PATH_LOCAL}"
     cleanup_info
     exit 1
 fi
 
-# Set Port Forwarding via SSH
+### Set Port Forwarding via SSH ###
+echo "Starting SSH Port Forward"
 # TODO: Autodetect PORT_ORIG via INFO_FILE
-CMDSSH="ssh -N -f -L ${PORT_NEW}:localhost:${PORT_ORIG} ${REMOTEHOST}"
+CMDSSH="ssh -N -f -L ${PORT_NEW}:localhost:${PORT_ORIG} ${SSHCONNSTR}"
 ${CMDSSH}
 if [[ $? -ne 0 ]]
 then
-    echo "Failed to establish SSH port forwarding to host ${REMOTEHOST}"
+    errcho "Failed to establish SSH port forwarding to host ${SSHCONNSTR}"
     cleanup_info
     exit 1
 fi
 
 cleanup_ssh(){
+    echo "Closing SSH Port Forward"
     pkill -f "${CMDSSH}"
 }
 
-# Run CrashPlan Desktop
+### Run CrashPlan Desktop ###
+echo "Starting CrashPlanDesktop"
 ${CRASHPLAN_DESKTOP}
 if [[ $? -ne 0 ]]
 then
-    echo "CrashPlanDeskrop Exited with Error"
+    errcho "CrashPlanDeskrop Exited with Error"
     cleanup_ssh
     cleanup_info
     exit 1
 fi
 
-# Cleanup
+### Cleanup ###
 echo "Press any key when complete to perform cleanup"
 read
 cleanup_ssh
