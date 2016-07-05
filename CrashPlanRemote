@@ -72,7 +72,7 @@ echo "Syncing Remote Install Files to Local Host"
 
 if [[ ! -d "${CRASHPLAN_DIR_LOCAL}" ]]
 then
-    mkdir "${CRASHPLAN_DIR_LOCAL}"
+    mkdir -p "${CRASHPLAN_DIR_LOCAL}"
 fi
 
 rsync_check ${SSHCONNSTR}:"${CRASHPLAN_DIR_REMOTE}/bin" "${CRASHPLAN_DIR_LOCAL}/"
